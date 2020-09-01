@@ -2,7 +2,7 @@ terraform {
   required_providers {
     davidgortega = {
       versions = ["0.2"]
-      source = "hashicorp.com/edu/hashicups"
+      source = "github.com/davidgortega/davidgortega"
     }
   }
 }

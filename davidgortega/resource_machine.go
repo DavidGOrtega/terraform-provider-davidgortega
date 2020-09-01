@@ -7,16 +7,16 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
-
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/teris-io/shortid"
 )
 
 func resourceMachine() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceMachineCreate,
 		ReadContext:   resourceMachineRead,
-		//UpdateContext: resourceMachineUpdate,
+		//UpdateContext: resourceMachineUpdate,s
 		DeleteContext: resourceMachineDelete,
 		Schema: map[string]*schema.Schema{
 			"key_name": &schema.Schema{
@@ -69,12 +69,15 @@ func resourceMachine() *schema.Resource {
 func resourceMachineCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	svc, _ := aws_client(d)
+	sid, err := shortid.New(1, shortid.DefaultABC, 2342)
+	id, _ := sid.Generate()
+
+	svc, _ := awsClient(d)
 	ctxx := context.Background()
 
 	ami := d.Get("instance_ami").(string)
 	instanceType := d.Get("instance_type").(string)
-	pairName := "mykey"
+	pairName := "cml_" + id
 
 	keyResult, err := svc.CreateKeyPair(&ec2.CreateKeyPairInput{
 		KeyName: aws.String(pairName),
@@ -82,9 +85,10 @@ func resourceMachineCreate(ctx context.Context, d *schema.ResourceData, m interf
 	if err != nil {
 		return diag.FromErr(err)
 	}
+	keyMaterial := *keyResult.KeyMaterial
 
 	runResult, err := svc.RunInstancesWithContext(ctxx, &ec2.RunInstancesInput{
-		KeyName:      keyResult.KeyName,
+		KeyName:      aws.String(pairName),
 		ImageId:      aws.String(ami),
 		InstanceType: aws.String(instanceType),
 		MinCount:     aws.Int64(1),
@@ -120,7 +124,7 @@ func resourceMachineCreate(ctx context.Context, d *schema.ResourceData, m interf
 	}
 	svc.WaitUntilInstanceExistsWithContext(ctxx, &statusInput)
 
-	//time.Sleep(20 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	descResult, _ := svc.DescribeInstancesWithContext(ctxx, &statusInput)
 	instanceDesc := descResult.Reservations[0].Instances[0]
@@ -129,8 +133,8 @@ func resourceMachineCreate(ctx context.Context, d *schema.ResourceData, m interf
 	d.Set("instance_id", instanceID)
 	d.Set("instance_ip", instanceDesc.PublicIpAddress)
 	d.Set("instance_launch_time", instanceDesc.LaunchTime.Format(time.RFC3339))
-	d.Set("key_name", *keyResult.KeyName)
-	d.Set("private_key", *keyResult.KeyMaterial)
+	d.Set("key_name", pairName)
+	d.Set("private_key", keyMaterial)
 
 	/* if err := d.Set("instaceID", instanceID); err != nil {
 		return diag.FromErr(err)
@@ -150,17 +154,17 @@ func resourceMachineUpdate(ctx context.Context, d *schema.ResourceData, m interf
 func resourceMachineDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	svc, _ := aws_client(d)
+	svc, _ := awsClient(d)
 
 	instanceID := d.Get("instance_id").(string)
-	pairName := d.Get("key_name").(string)
+	//pairName := d.Get("key_name").(string)
 
-	_, erro := svc.DeleteKeyPair(&ec2.DeleteKeyPairInput{
+	/* _, erro := svc.DeleteKeyPair(&ec2.DeleteKeyPairInput{
 		KeyName: aws.String(pairName),
 	})
 	if erro != nil {
-		return diag.FromErr(erro)
-	}
+		diag.FromErr(erro)
+	} */
 
 	input := &ec2.TerminateInstancesInput{
 		InstanceIds: []*string{
@@ -178,7 +182,7 @@ func resourceMachineDelete(ctx context.Context, d *schema.ResourceData, m interf
 	return diags
 }
 
-func aws_client(d *schema.ResourceData) (*ec2.EC2, diag.Diagnostics) {
+func awsClient(d *schema.ResourceData) (*ec2.EC2, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	region := d.Get("region").(string)
