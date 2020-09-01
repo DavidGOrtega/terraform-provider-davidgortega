@@ -4,7 +4,7 @@ NAMESPACE=davidgortega
 NAME=davidgortega
 BINARY=terraform-provider-${NAME}
 VERSION=0.1
-OS_ARCH=darwin_amd64
+OS_ARCH=_linux_amd64
 
 default: install
 
