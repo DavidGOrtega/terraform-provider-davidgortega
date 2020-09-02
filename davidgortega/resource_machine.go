@@ -78,6 +78,7 @@ func resourceMachineCreate(ctx context.Context, d *schema.ResourceData, m interf
 	ami := d.Get("instance_ami").(string)
 	instanceType := d.Get("instance_type").(string)
 	pairName := "cml_" + id
+	//groupName := "cml"
 
 	keyResult, err := svc.CreateKeyPair(&ec2.CreateKeyPairInput{
 		KeyName: aws.String(pairName),
@@ -86,6 +87,16 @@ func resourceMachineCreate(ctx context.Context, d *schema.ResourceData, m interf
 		return diag.FromErr(err)
 	}
 	keyMaterial := *keyResult.KeyMaterial
+
+	/* vpcDesc, _ := svc.DescribeVpcs(&ec2.DescribeVpcsInput{
+
+	})
+
+	createRes, err := svc.CreateSecurityGroup(&ec2.CreateSecurityGroupInput{
+		GroupName: aws.String(groupName),
+		Description: aws.String(""),
+		VpcId: aws.String(*vpcIDPtr),
+	}) */
 
 	runResult, err := svc.RunInstancesWithContext(ctxx, &ec2.RunInstancesInput{
 		KeyName:      aws.String(pairName),
