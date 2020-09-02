@@ -78,7 +78,7 @@ func resourceMachineCreate(ctx context.Context, d *schema.ResourceData, m interf
 	ami := d.Get("instance_ami").(string)
 	instanceType := d.Get("instance_type").(string)
 	pairName := "cml_" + id
-	//groupName := "cml"
+	groupName := "cml"
 
 	keyResult, err := svc.CreateKeyPair(&ec2.CreateKeyPairInput{
 		KeyName: aws.String(pairName),
@@ -88,15 +88,49 @@ func resourceMachineCreate(ctx context.Context, d *schema.ResourceData, m interf
 	}
 	keyMaterial := *keyResult.KeyMaterial
 
-	/* vpcDesc, _ := svc.DescribeVpcs(&ec2.DescribeVpcsInput{
+	vpcsDesc, _ := svc.DescribeVpcs(&ec2.DescribeVpcsInput{
+		/* Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("tag:Name"),
+				Values: []*string{aws.String("cml")},
+			},
+		}, */
+	})
+	vpc := vpcsDesc.Vpcs[0]
 
+	gpResult, ee := svc.CreateSecurityGroup(&ec2.CreateSecurityGroupInput{
+		GroupName:   aws.String(groupName),
+		Description: aws.String("CML security group"),
+		VpcId:       aws.String(*vpc.VpcId),
 	})
 
-	createRes, err := svc.CreateSecurityGroup(&ec2.CreateSecurityGroupInput{
-		GroupName: aws.String(groupName),
-		Description: aws.String(""),
-		VpcId: aws.String(*vpcIDPtr),
-	}) */
+	if ee == nil {
+		svc.AuthorizeSecurityGroupIngress(&ec2.AuthorizeSecurityGroupIngressInput{
+			GroupId: aws.String(*gpResult.GroupId),
+			IpPermissions: []*ec2.IpPermission{
+				(&ec2.IpPermission{}).
+					SetIpProtocol("-1").
+					SetFromPort(-1).
+					SetToPort(-1).
+					SetIpRanges([]*ec2.IpRange{
+						{CidrIp: aws.String("0.0.0.0/0")},
+					}),
+			},
+		})
+
+		svc.AuthorizeSecurityGroupEgress(&ec2.AuthorizeSecurityGroupEgressInput{
+			GroupId: aws.String(*gpResult.GroupId),
+			IpPermissions: []*ec2.IpPermission{
+				(&ec2.IpPermission{}).
+					SetIpProtocol("-1").
+					SetFromPort(-1).
+					SetToPort(-1).
+					SetIpRanges([]*ec2.IpRange{
+						{CidrIp: aws.String("0.0.0.0/0")},
+					}),
+			},
+		})
+	}
 
 	runResult, err := svc.RunInstancesWithContext(ctxx, &ec2.RunInstancesInput{
 		KeyName:      aws.String(pairName),
@@ -104,6 +138,9 @@ func resourceMachineCreate(ctx context.Context, d *schema.ResourceData, m interf
 		InstanceType: aws.String(instanceType),
 		MinCount:     aws.Int64(1),
 		MaxCount:     aws.Int64(1),
+		SecurityGroups: []*string{
+			aws.String(groupName),
+		},
 
 		//CpuOptions:   instanceOpts.CpuOptions,
 	})
@@ -168,14 +205,14 @@ func resourceMachineDelete(ctx context.Context, d *schema.ResourceData, m interf
 	svc, _ := awsClient(d)
 
 	instanceID := d.Get("instance_id").(string)
-	//pairName := d.Get("key_name").(string)
+	pairName := d.Get("key_name").(string)
 
-	/* _, erro := svc.DeleteKeyPair(&ec2.DeleteKeyPairInput{
+	_, erro := svc.DeleteKeyPair(&ec2.DeleteKeyPairInput{
 		KeyName: aws.String(pairName),
 	})
 	if erro != nil {
 		diag.FromErr(erro)
-	} */
+	}
 
 	input := &ec2.TerminateInstancesInput{
 		InstanceIds: []*string{
